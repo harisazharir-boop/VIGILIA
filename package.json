@@ -1,0 +1,41 @@
+{
+  "name": "vigilia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "VIGILIA — AI Laptop Guardian",
+  "workspaces": [
+    "backend",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace backend",
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "lint": "npm run lint --workspaces",
+    "agent:linux": "python3 agents/linux/main.py",
+    "agent:windows": "python3 agents/windows/main.py",
+    "agent:linux:test": "python3 -m unittest discover -s agents/linux -p 'test_*.py' -v",
+    "agent:windows:test": "python3 -m unittest discover -s agents/windows -p 'test_*.py' -v",
+    "e2e:ui": "node mobile/e2e.test.mjs",
+    "e2e:realtime": "node mobile/e2e-realtime.mjs",
+    "e2e:applications": "node mobile/e2e-applications.mjs",
+    "e2e:activity": "node mobile/e2e-activity.mjs",
+    "e2e:storage": "node mobile/e2e-storage.mjs",
+    "e2e:cleaner": "node mobile/e2e-cleaner.mjs",
+    "e2e:security": "node mobile/e2e-security.mjs",
+    "e2e:phase5": "node mobile/e2e-phase5.mjs",
+    "e2e:phase6": "node mobile/e2e-phase6.mjs",
+    "e2e:phase7": "node mobile/e2e-phase7.mjs",
+    "e2e:phase8": "node mobile/e2e-phase8.mjs",
+    "ai:test": "python3 -m unittest ai.test_anomaly -v",
+    "e2e:phase9": "node mobile/e2e-phase9.mjs",
+    "e2e:phase10d": "node mobile/e2e-phase10d.mjs",
+    "e2e:privileged": "node mobile/e2e-privileged.mjs",
+    "e2e:recovery": "node mobile/e2e-recovery.mjs",
+    "bench:sqlite": "node scripts/sqlite-wal-benchmark.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

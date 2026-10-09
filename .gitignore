@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Env / secrets — NEVER commit real tokens
+.env
+.env.local
+.env.*.local
+*.token
+.*.token
+.agent-token
+.vigilia/
+ai/models/*.gguf
+ai/models/*.sha256
+
+# Database
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+prisma/dev.db
+
+# Logs
+logs/
+*.log
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Test / coverage
+coverage/
+.pytest_cache/

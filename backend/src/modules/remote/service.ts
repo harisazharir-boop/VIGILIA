@@ -1,0 +1,26 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { prisma } from '../../config/db.js';
+import { wsHub } from '../../ws/hub.js';
+import type { RemoteDesktopCapabilities, RemoteInput, RemoteSession } from '@vigilia/shared';
+
+const EMPTY: RemoteDesktopCapabilities = { screenshot: false, streaming: false, mouse: false, keyboard: false, maxWidth: 0, maxHeight: 0, maxFps: 0, supportedFormats: [] };
+const capabilities = new Map<string, RemoteDesktopCapabilities>();
+const TTL = 5 * 60_000;
+function sessionId(): string { const bytes = new Uint8Array(18); crypto.getRandomValues(bytes); return `rds_${Buffer.from(bytes).toString('base64url')}`; }
+function record(deviceId: string, operation: string, status: string, sessionId?: string, reason?: string) { return prisma.remoteAudit.create({ data: { deviceId, operation, status, sessionId, reason: reason?.slice(0, 280) } }); }
+function view(row: any): RemoteSession { return { sessionId: row.sessionId, deviceId: row.deviceId, status: row.status, capabilities: row.capabilities as RemoteDesktopCapabilities, createdAt: row.createdAt.toISOString(), lastActivityAt: row.lastActivityAt.toISOString(), expiresAt: row.expiresAt.toISOString(), reason: row.reason }; }
+export function storeCapabilities(deviceId: string, value: RemoteDesktopCapabilities): void { capabilities.set(deviceId, value); }
+export function capabilityFor(deviceId: string): RemoteDesktopCapabilities { return capabilities.get(deviceId) ?? EMPTY; }
+export async function start(deviceId: string): Promise<RemoteSession> {
+  const device = await prisma.device.findUnique({ where: { id: deviceId } }); if (!device || device.status !== 'online') throw new Error('DISCONNECTED');
+  const cap = capabilityFor(deviceId); if (!cap.maxWidth || !cap.maxHeight || !cap.supportedFormats.includes('jpeg')) { await record(deviceId, 'REMOTE_DESKTOP_START', 'failed', undefined, 'CAPABILITY_UNAVAILABLE'); throw new Error('CAPABILITY_UNAVAILABLE'); }
+  await prisma.remoteSession.updateMany({ where: { deviceId, status: { in: ['REQUESTED', 'ACTIVE', 'PAUSED'] } }, data: { status: 'ENDED', endedAt: new Date(), reason: 'replaced' } });
+  const id = sessionId(); const expiresAt = new Date(Date.now() + TTL);
+  const row = await prisma.remoteSession.create({ data: { sessionId: id, deviceId, status: 'REQUESTED', capabilities: cap as any, expiresAt } });
+  await record(deviceId, 'REMOTE_DESKTOP_START', 'requested', id); wsHub.sendToAgent(deviceId, 'remote.session.start', { sessionId: id, deadline: Math.floor(expiresAt.getTime() / 1000) }); return view(row);
+}
+export async function get(deviceId: string, id: string): Promise<RemoteSession | null> { const row = await prisma.remoteSession.findUnique({ where: { sessionId: id } }); if (!row || row.deviceId !== deviceId) return null; if (row.expiresAt < new Date() && ['REQUESTED', 'ACTIVE', 'PAUSED'].includes(row.status)) { await prisma.remoteSession.update({ where: { sessionId: id }, data: { status: 'EXPIRED', endedAt: new Date(), reason: 'idle timeout' } }); await record(deviceId, 'REMOTE_DESKTOP_EXPIRED', 'expired', id); return null; } return view(row); }
+export async function stop(deviceId: string, id: string, reason = 'stopped by mobile'): Promise<void> { const current = await get(deviceId, id); if (!current) throw new Error('SESSION_NOT_FOUND'); await prisma.remoteSession.update({ where: { sessionId: id }, data: { status: 'STOPPING', reason } }); wsHub.sendToAgent(deviceId, 'remote.session.stop', { sessionId: id, reason }); await record(deviceId, 'REMOTE_DESKTOP_STOP', 'requested', id); }
+export async function input(deviceId: string, event: RemoteInput): Promise<void> { const current = await get(deviceId, event.sessionId); if (!current || current.status !== 'ACTIVE') throw new Error('SESSION_EXPIRED'); const cap = current.capabilities; if ((event.type.startsWith('MOUSE') && !cap.mouse) || (event.type.startsWith('KEY') && !cap.keyboard)) throw new Error('CAPABILITY_UNAVAILABLE'); await prisma.remoteSession.update({ where: { sessionId: event.sessionId }, data: { lastActivityAt: new Date(), expiresAt: new Date(Date.now() + TTL) } }); wsHub.sendToAgent(deviceId, 'remote.input', event); }
+export async function relayFrame(deviceId: string, sessionId: string, payload: Buffer): Promise<boolean> { const current = await get(deviceId, sessionId); return Boolean(current && current.status === 'ACTIVE' && payload.length >= 4 && payload.length <= 900 * 1024 && payload[0] === 0xff && payload[1] === 0xd8); }
+export async function applyResult(deviceId: string, result: { sessionId: string; status: string; reason?: string; capabilities?: RemoteDesktopCapabilities }): Promise<void> { const row = await prisma.remoteSession.findUnique({ where: { sessionId: result.sessionId } }); if (!row || row.deviceId !== deviceId) return; const status = result.status; await prisma.remoteSession.update({ where: { sessionId: result.sessionId }, data: { status, reason: result.reason?.slice(0, 280), capabilities: (result.capabilities ?? row.capabilities) as any, lastActivityAt: new Date(), ...( ['ENDED', 'FAILED', 'EXPIRED'].includes(status) ? { endedAt: new Date() } : {}) } }); await record(deviceId, status === 'ACTIVE' ? 'REMOTE_DESKTOP_START' : 'REMOTE_DESKTOP_FAILED', status.toLowerCase(), result.sessionId, result.reason); }

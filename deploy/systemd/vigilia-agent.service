@@ -1,0 +1,21 @@
+[Unit]
+Description=VIGILIA user agent
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/vigilia
+Environment=PYTHONPATH=%h/vigilia
+EnvironmentFile=%h/.config/vigilia/agent.env
+ExecStart=/usr/bin/env PYTHONPATH=%h/vigilia /usr/bin/python3 %h/vigilia/agents/linux/main.py
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vigilia-agent
+
+[Install]
+WantedBy=default.target

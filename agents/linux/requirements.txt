@@ -1,0 +1,19 @@
+# VIGILIA Linux agent requirements (optional)
+#
+# The agent runs on a stock CPython 3.11+ install and uses /proc and /sys
+# directly when psutil is not present. Installing psutil improves accuracy of
+# CPU and process metrics and is the recommended path:
+#
+#   pip install -r agents/linux/requirements.txt
+#
+# No third-party package is required for registration, telemetry or the
+# WebSocket transport — those use only the standard library.
+
+psutil>=5.9.0
+
+# Optional, offline experimentation only. Production monitoring uses bounded
+# rules until an evaluated local Isolation Forest model is installed.
+# scikit-learn>=1.4.0
+
+# Development / testing only:
+# pytest>=8.0.0

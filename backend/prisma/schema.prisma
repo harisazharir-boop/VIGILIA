@@ -1,0 +1,323 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A laptop registered with VIGILIA (Ubuntu or Windows).
+model Device {
+  id           String   @id @default(cuid())
+  name         String
+  os           String
+  hostname     String
+  agentToken   String?  @unique
+  commandToken String?
+  status       String   @default("offline")
+  lastSeen     DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  telemetry          Telemetry?
+  commandLogs        CommandLog[]
+  applicationCatalog ApplicationCatalog?
+  processSnapshots   ProcessSnapshot[]
+  storageReport      StorageReport?
+  cleanupPlan        CleanupPlan?
+  ownerState         OwnerState?
+  dailyCleanup       DailyCleanupState?
+  securityEvents     SecurityEvent[]
+  filesystemAudits   FilesystemAudit[]
+  remoteSessions     RemoteSession[]
+  remoteAudits       RemoteAudit[]
+  hardwareAudits     HardwareAudit[]
+  aiAudits           AiAudit[]
+  aiAlerts           AiAlert[]
+  aiMessages         AiMessage[]
+  aiConfirmations    AiConfirmation[]
+  guardianPreferences GuardianPreferences?
+
+  @@index([name, hostname])
+  @@index([status, lastSeen])
+}
+
+model Telemetry {
+  id        String   @id @default(cuid())
+  deviceId  String   @unique
+  sample    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model CommandLog {
+  id        String    @id @default(cuid())
+  deviceId  String
+  command   String
+  status    String    @default("queued")
+  note      String?
+  target    String?
+  result    String?
+  requestId String    @unique
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  expiresAt DateTime?
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, createdAt])
+  @@index([status, expiresAt])
+}
+
+/// Phase 6 durable file-operation audit. Target references are one-way hashes
+/// of opaque agent handles; paths, contents and credentials are never stored.
+model FilesystemAudit {
+  id          String   @id @default(cuid())
+  requestId   String   @unique
+  deviceId    String
+  operation   String
+  targetHash  String?
+  status      String
+  reason      String?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, createdAt])
+  @@index([status, completedAt])
+}
+
+model RemoteSession {
+  id             String   @id @default(cuid())
+  sessionId      String   @unique
+  deviceId       String
+  status         String
+  capabilities   Json
+  createdAt      DateTime @default(now())
+  lastActivityAt DateTime @default(now())
+  expiresAt      DateTime
+  endedAt        DateTime?
+  reason         String?
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  @@index([deviceId, status])
+  @@index([expiresAt])
+}
+
+model RemoteAudit {
+  id        String   @id @default(cuid())
+  sessionId String?
+  deviceId  String
+  operation String
+  status    String
+  reason    String?
+  createdAt DateTime @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  @@index([deviceId, createdAt])
+}
+
+model HardwareAudit {
+  id        String   @id @default(cuid())
+  requestId String?  @unique
+  deviceId  String
+  control   String
+  status    String
+  reason    String?
+  createdAt DateTime @default(now())
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  @@index([deviceId, createdAt])
+}
+
+model AiAudit {
+  id        String   @id @default(cuid())
+  requestId String   @unique
+  deviceId  String
+  tool      String
+  status    String
+  reason    String?
+  createdAt DateTime @default(now())
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  @@index([deviceId, createdAt])
+}
+
+model AiAlert {
+  id        String   @id @default(cuid())
+  deviceId  String
+  severity  String
+  category  String
+  message   String
+  createdAt DateTime @default(now())
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  @@index([deviceId, createdAt])
+}
+
+model AiMessage {
+  id        String   @id @default(cuid())
+  deviceId  String
+  role      String
+  content   String
+  createdAt DateTime @default(now())
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  @@index([deviceId, createdAt])
+}
+
+model AiConfirmation {
+  id        String   @id @default(cuid())
+  requestId String   @unique
+  deviceId  String
+  action    String
+  status    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  decidedAt DateTime?
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  @@index([deviceId, status, expiresAt])
+}
+
+model GuardianPreferences {
+  deviceId       String @id
+  healthAlerts   Boolean @default(true)
+  securityAlerts Boolean @default(true)
+  updatedAt      DateTime @updatedAt
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model ApplicationCatalog {
+  id        String   @id @default(cuid())
+  deviceId  String   @unique
+  catalog   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+model ProcessSnapshot {
+  id         String   @id @default(cuid())
+  deviceId   String
+  snapshot   Json
+  totalCount Int
+  limit      Int
+  timestamp  DateTime @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, timestamp])
+}
+
+model StorageReport {
+  id        String   @id
+  deviceId  String   @unique
+  summary   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, updatedAt])
+}
+
+/// Latest cleanup plan reported by an agent (Phase 4B/4C).
+///
+/// One row per device, replaced wholesale on every report. The plan is the
+/// set of structured cleanup actions this device offers — action id, label,
+/// description, measured estimate, supported platforms — plus the advisory
+/// AI recommendations derived from the storage breakdown.
+///
+/// Every action id in the row comes from the `CLEAN_ACTIONS` allowlist and is
+/// re-validated on write, so the stored plan cannot name an arbitrary action.
+/// The row holds no path of any kind: an action id resolves to fixed roots on
+/// the device, and the backend never learns what they are.
+model CleanupPlan {
+  id        String   @id
+  deviceId  String   @unique
+  plan      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, updatedAt])
+}
+
+/// The owner-presence state of a device (Phase 5A/5B).
+///
+/// One row per device, replaced wholesale on every report — this is the
+/// current trust state, not a history. The row deliberately holds **no
+/// biometric material**: it records the *outcome* of an authentication (the
+/// `state`, when it was established, how many attempts failed) and nothing
+/// else. Templates, embeddings and images never leave the device, so there is
+/// nothing in this row to leak.
+model OwnerState {
+  id                   String   @id
+  deviceId             String   @unique
+  /// `OWNER | GUEST | UNKNOWN | LOCKED`. Drives every owner-only gate.
+  state                String
+  /// Epoch seconds the state was established.
+  since                Float
+  /// Epoch seconds of the last successful owner authentication.
+  lastAuthenticatedAt  Float?
+  failedAttempts       Int      @default(0)
+  /// Safe capability flags the device reports (no secrets).
+  capabilities         Json
+  /// `YYYY-MM-DD` of the last completed daily cleanup, in the device's zone.
+  lastDailyCleanupDate String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+/// Durable Daily Auto Cleanup state (Phase 5E).
+///
+/// The once-per-day rule has to survive a reboot, so it lives here and not in
+/// agent memory. `lastCleanupDate` is a calendar date in the device's own
+/// timezone (recorded by the agent, which knows its zone); the eligibility
+/// check compares that string, so the rule is "one cleanup per device-day",
+/// not "one cleanup per 24 hours of the server's clock".
+model DailyCleanupState {
+  id              String   @id
+  deviceId        String   @unique
+  /// `YYYY-MM-DD`, the device's own zone.
+  lastCleanupDate String?
+  lastCleanupAt   Float?
+  lastResult      String?
+  /// The owner's configuration, validated against the allowlist on write.
+  config          Json
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+}
+
+/// One security event (Phase 5C/5D).
+///
+/// This is *not* a second activity system: the Activity screen renders
+/// `CommandLog` and these rows side by side, newest-first, and both are
+/// read-only views of what the device's own agent reported. The `eventType`
+/// comes from a fixed enum, `severity` is derived from it server-side (never
+/// accepted from a client), and `metadata` is a bounded object whose keys are
+/// enumerated in the schema — there is no field here that could hold a path,
+/// a credential or biometric data.
+model SecurityEvent {
+  id          String   @id @default(cuid())
+  deviceId    String
+  eventType   String
+  severity    String
+  description String
+  metadata    Json?
+  requestId   String?
+  /// Epoch seconds the event refers to, when different from `createdAt`.
+  since       Float?
+  createdAt   DateTime @default(now())
+
+  device Device @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([deviceId, createdAt])
+  @@index([eventType, createdAt])
+}

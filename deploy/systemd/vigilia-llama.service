@@ -1,0 +1,23 @@
+[Unit]
+Description=VIGILIA local Qwen llama.cpp runtime
+After=network.target
+Before=vigilia-backend.service
+
+[Service]
+Type=simple
+User=vigilia
+Group=vigilia
+WorkingDirectory=/opt/vigilia
+EnvironmentFile=/etc/vigilia/llama.env
+ExecStartPre=/usr/bin/node /opt/vigilia/deploy/model-preflight.mjs
+ExecStart=/opt/vigilia/bin/llama-server --model ${VIGILIA_QWEN_GGUF} --host 127.0.0.1 --port ${VIGILIA_LOCAL_AI_PORT} --alias ${VIGILIA_LOCAL_AI_MODEL} --threads ${VIGILIA_LOCAL_AI_THREADS} --ctx-size ${VIGILIA_LOCAL_AI_CONTEXT} --parallel ${VIGILIA_LOCAL_AI_PARALLEL} --no-webui
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vigilia-llama
+
+[Install]
+WantedBy=multi-user.target
